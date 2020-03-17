@@ -68,15 +68,22 @@ ui <- dashboardPagePlus(
                         wellPanel(
                                    titlePanel("A Survey Demo"),
                                    div(id = "form",
+                                       textInput("name", labelMandatory("Name"), ""),
                                        selectInput("location",labelMandatory("Location"),
                                                    unique(df$Intersection)),
                                        dateInput("date",labelMandatory("Date")),
                                        timeInput("time_start","Start Time:"),
                                        timeInput("time_end","End Time:"),
-                                       textInput("name", labelMandatory("Name"), ""),
-                                       textInput("favourite_pkg", labelMandatory("Favourite R package")),
-                                       # checkboxInput("used_shiny", "I've built a Shiny app in R before", FALSE),
-                                       sliderInput("r_num_years", "Number of years using R", 0, 10, 2, ticks = FALSE),
+                                       matrixInput("helmet",
+                                                   value = matrix(0, 2, 2,
+                                                                  dimnames = list(c("With Helmet", "Without Helmet"),
+                                                                                  c("Male","Female"))),
+                                                   
+                                                   rows=list(names=TRUE),
+                                                   col=list(names=TRUE),
+                                                   class = "numeric",
+                                                   paste = TRUE,
+                                                   copy = TRUE),
                                        matrixInput("turns",
                                                    value = matrix(0, 4, 3,
                                                                   dimnames = list(c("Northbound", "Southbound","Eastbound","Westbound"),
@@ -159,10 +166,17 @@ ui <- dashboardPagePlus(
 
 server <- function(input, output) {
 
+data_react <- reactive({
+        filtered <- df %>%
+            filter(Intersection %in% input$int)%>%
+            filter(TrafficClass %in% input$tclass)
+        if(nrow(filtered)==0) {return(df)}
+        else{return(filtered)}
+    })
+    
     output$plot1 <- renderPlot( {
-        df %>%
-            filter(Intersection %in% input$int) %>%
-            filter(TrafficClass %in% input$tclass) %>%
+        data <- data_react() 
+        data %>%
             ggplot() +
             aes(x = Latitude, y = Longitude, color = TrafficClass) +
             geom_point(size = 2L) +
@@ -171,18 +185,12 @@ server <- function(input, output) {
                  title = "[2] Commute Time v. [43] Age")
     })
 
-    map_data_react <- reactive({
-        df %>%
-            filter(Intersection %in% input$int)%>%
-            filter(TrafficClass %in% input$tclass)
-    })
+
     
     output$plot2 <- renderLeaflet({
-        map_data <- map_data_react()
+        map_data <- data_react()
         
         print(nrow(map_data))
-        
-        if(nrow(map_data)==0) {map_data<-df}
         
         leaflet() %>% 
             addTiles()  %>% 
@@ -196,32 +204,33 @@ server <- function(input, output) {
     fieldsAll <- colnames(df)
     
     # get the system time
-    timestamp <- function() format(Sys.time(), "%Y-%m-%dT%H:%M:%OS")
+    timestamp <- function() format(Sys.time(), "%Y-%m-%d %H:%M:%OS")
     
     # get the forecast
     weather <- function() {
         
         forcast_lat=df.loc$Latitude[df.loc$Intersection == input$location]
         forcast_lon=df.loc$Longitude[df.loc$Intersection == input$location]
-        forcast_time=paste0(
-            str_pad(hour(input$time_start),2,"left","0"),
-            ":00:00")
+        forcast_time=paste0(str_pad(hour(input$time_start),2,"left","0"),":00:00")
         
-        f=get_forecast_for(
+        forecast=get_forecast_for(
             latitude = forcast_lat,
             longitude = forcast_lon,
             timestamp = paste0(input$date,"T",forcast_time))
-        filtered=f$hourly[,c("time","temperature","summary")]
-        indexed=filtered[which(filtered$time == paste0(input$date," ",forcast_time)),]
-        print(indexed)
-        return(indexed)
+        forecast=forecast$hourly
+        forecast=forecast[which(
+            forecast$time == paste0(input$date," ",forcast_time)
+            ),]
+       forecast=forecast[,c("temperature","summary")]
+        print(forecast)
+        return(forecast)
     }
 
 
     # gather form data into a format
     formData <- reactive({
         data <- sapply(fieldsAll, function(x) input[[x]])
-        data <- c(data, timestamp = timestamp())
+        data <- c(data,weather=weather(),timestamp = timestamp())
         data <- t(data)
         data <- as.data.frame(data)
 
