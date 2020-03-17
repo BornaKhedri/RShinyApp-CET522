@@ -1,11 +1,4 @@
-#
-# This is a Shiny web application. You can run the application by clicking
-# the 'Run App' button above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
+#### Libraries ####
 
 library(shiny)
 library(shinyjs)
@@ -21,9 +14,12 @@ library(shinydashboardPlus)
 library(viridis)
 library(maps)
 library(leaflet)
-library(owmr)
+library(darksky)
+library(shinyMatrix)
 
-Sys.setenv(OWM_API_KEY = "3569a7591bf810f312c81a5ba06b78ea")
+#### Setup ####
+
+Sys.setenv(DARKSKY_API_KEY= "dc4edf99f802619773ee304daeea74ff")
 
 df.loc <- read_excel(
     path = "Final Project Data.xlsx",
@@ -42,39 +38,33 @@ labelMandatory <- function(label) {
         span("*", class = "mandatory_star")
     )}
 
-# Define UI for application that draws a histogram
+
 ui <- dashboardPagePlus(
-        header = dashboardHeaderPlus(
-            enable_rightsidebar = TRUE,
-             rightSidebarIcon = "gears"
-            ),
-        sidebar = dashboardSidebar(
+#### Top Bar ####
+        dashboardHeaderPlus(title = "CET521 Project",enable_rightsidebar = TRUE,rightSidebarIcon = "gears"),
+#### Sidebar ####     
+        dashboardSidebar(
             sidebarMenu(
-                menuItem("Dashboard", 
-                         tabName = "dashboard", 
-                         icon = icon("dashboard")),
-                menuItem("Survey", 
-                         tabName = "survey", 
-                         icon = icon("th"))
-            )
-        ),
-        body = dashboardBody(
+                menuItem("Dashboard",tabName = "dashboard",icon = icon("dashboard")),
+                menuItem("Survey",tabName = "survey",icon = icon("poll-h")))
+            ),
+#### Body ####
+       dashboardBody(
             tabItems(
-                tabItem(
-                    tabName = "dashboard",
-                    h2("Hello World"),
-                    fluidRow(box(plotOutput("plot1"))),
-                    fluidRow(box(leafletOutput("plot2")))
-                    ),
-                tabItem(
-                    tabName = "survey",
-                    h2("foo bar"),
+                #First Tab
+                tabItem(tabName = "dashboard",h2("Hello World"),
                     fluidRow(
-                        # state using shinyjs based on Javascript
-                        shinyjs::useShinyjs(),
+                        box(plotOutput("plot1")),
+                        box(leafletOutput("plot2"))
+                        )
+                    ),
+                #Second Tab
+                tabItem(tabName = "survey",h2("foo bar"),
+                    mainPanel(
                         
-                        column(6,
-                               wellPanel(
+                        shinyjs::useShinyjs(),# state using shinyjs based on Javascript
+                        
+                        wellPanel(
                                    titlePanel("A Survey Demo"),
                                    div(id = "form",
                                        selectInput("location",labelMandatory("Location"),
@@ -86,7 +76,16 @@ ui <- dashboardPagePlus(
                                        textInput("favourite_pkg", labelMandatory("Favourite R package")),
                                        # checkboxInput("used_shiny", "I've built a Shiny app in R before", FALSE),
                                        sliderInput("r_num_years", "Number of years using R", 0, 10, 2, ticks = FALSE),
-                                       
+                                       matrixInput("turns",
+                                                   value = matrix(0, 4, 3,
+                                                                  dimnames = list(c("Northbound", "Southbound","Eastbound","Westbound"),
+                                                                                  c("Left","Straight","Right"))),
+                                                
+                                                   rows=list(names=TRUE),
+                                                   col=list(names=TRUE),
+                                                   class = "numeric",
+                                                   paste = TRUE,
+                                                   copy = TRUE),
                                        actionButton("submit", "Submit", class = "btn-primary")
                                    ),
                                    shinyjs::hidden(
@@ -100,7 +99,7 @@ ui <- dashboardPagePlus(
                                )
                         )
                     )
-                ))),
+                )),
 
         rightsidebar = rightSidebar(
             background = "dark",
@@ -120,16 +119,22 @@ ui <- dashboardPagePlus(
                             max = 50,
                             value = 30),
 
-                selectInput(inputId = "int", label = strong("Intersection"),
+                pickerInput(inputId = "int", 
+                            label = strong("Intersection"),
                             choices = unique(df$Intersection),
-                            selected = "Travel",
-                            multiple = TRUE),
+                            selected = unique(df$Intersection),
+                            multiple = TRUE,
+                            options = list(`actions-box` = TRUE,
+                                           `selected-text-format` = "count > 1",
+                                           `count-selected-text` = "{0} Intersection Selected",
+                                           `live-search`=TRUE)
+                            ),
 
 
                 selectInput(inputId = "tclass",
                             label = "Traffic Class",
                             choices=unique(df$TrafficClass),
-                            selected = NULL,
+                            selected = unique(df$TrafficClass),
                             multiple = TRUE,
                             selectize = TRUE,
                             width = NULL,
@@ -151,18 +156,9 @@ ui <- dashboardPagePlus(
 )
 
 
-# Define server logic required to draw a histogram
 server <- function(input, output) {
 
     output$plot1 <- renderPlot( {
-        # generate bins bed on input$bins from ui.R
-        
-        # x    <- df.loc$Latitude[df.loc$Intersection==input$type]
-        # y    <- df.loc$Longitude[df.loc$Intersection==input$type]
-        # bins <- seq(min(x), max(x), length.out = input$bins + 1)
-
-        # draw the histogram with the specified number of bins
-        #hist(x, breaks = bins, col = 'darkgray', border = 'white',ylim = 0)
         df %>%
             filter(Intersection %in% input$int) %>%
             filter(TrafficClass %in% input$tclass) %>%
@@ -174,45 +170,49 @@ server <- function(input, output) {
                  title = "[2] Commute Time v. [43] Age")
     })
 
-    
-    output$plot2 <- renderLeaflet( {
-        # generate bins bed on input$bins from ui.R
-        
-        # x    <- df.loc$Latitude[df.loc$Intersection==input$type]
-        # y    <- df.loc$Longitude[df.loc$Intersection==input$type]
-        # bins <- seq(min(x), max(x), length.out = input$bins + 1)
-        
-        # draw the histogram with the specified number of bins
-        #hist(x, breaks = bins, col = 'darkgray', border = 'white',ylim = 0)
-          leaflet(df %>%
-                filter(Intersection %in% input$int) %>%
-                filter(TrafficClass %in% input$tclass)) %>% 
-            addTiles()  %>% 
-            addProviderTiles("Esri.WorldImagery") %>%
-            addCircleMarkers(~Longitude, ~Latitude)
+    map_data_react <- reactive({
+        df %>%
+            filter(Intersection %in% input$int)%>%
+            filter(TrafficClass %in% input$tclass)
     })
+    
+    output$plot2 <- renderLeaflet({
+        map_data <- map_data_react()
+        
+        print(nrow(map_data))
+        
+        if(nrow(map_data)==0) {map_data<-df}
+        
+        leaflet() %>% 
+            addTiles()  %>% 
+            addProviderTiles("Wikimedia") %>% 
+            addCircleMarkers(lng = map_data$Longitude, lat = map_data$Latitude)
+       
+    })
+    
     
     # define the header
     fieldsAll <- colnames(df)
     
     # get the system time
-    timestamp <- function() format(Sys.time(), "%Y-%m-%d %H:%M:%OS")
+    timestamp <- function() format(Sys.time(), "%Y-%m-%dT%H:%M:%OS")
     
     # get the forecast
     weather <- function() {
+        
+        
         forcast_lat=df.loc$Latitude[df.loc$Intersection == input$location]
         forcast_lon=df.loc$Longitude[df.loc$Intersection == input$location]
-        f=get_current(
-            lat=forcast_lat,
-            lon=forcast_lon,
-            units="Imperial")
-        t<-paste(round(f$main$temp,0),"°F",f$weather$main)
-        return(t)
+        f=get_forecast_for(
+            latitude = forcast_lat,
+            longitude = forcast_lon,
+            timestamp = paste0(input$date,"T",hour(input$time_start),":00:00"))
+        filtered=f[,c("time","temperature","summary")]
+        indexed=filtered[
+            which(filtered$time == paste0(input$date," ",hour(input$time_start),":00:00")),]
+        return(indexed)
     }
 
-
-    
-    
 
     # gather form data into a format
     formData <- reactive({
