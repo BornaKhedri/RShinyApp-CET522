@@ -16,6 +16,7 @@ library(maps)
 library(leaflet)
 library(darksky)
 library(shinyMatrix)
+library(lubridate)
 
 #### Setup ####
 
@@ -200,16 +201,19 @@ server <- function(input, output) {
     # get the forecast
     weather <- function() {
         
-        
         forcast_lat=df.loc$Latitude[df.loc$Intersection == input$location]
         forcast_lon=df.loc$Longitude[df.loc$Intersection == input$location]
+        forcast_time=paste0(
+            str_pad(hour(input$time_start),2,"left","0"),
+            ":00:00")
+        
         f=get_forecast_for(
             latitude = forcast_lat,
             longitude = forcast_lon,
-            timestamp = paste0(input$date,"T",hour(input$time_start),":00:00"))
-        filtered=f[,c("time","temperature","summary")]
-        indexed=filtered[
-            which(filtered$time == paste0(input$date," ",hour(input$time_start),":00:00")),]
+            timestamp = paste0(input$date,"T",forcast_time))
+        filtered=f$hourly[,c("time","temperature","summary")]
+        indexed=filtered[which(filtered$time == paste0(input$date," ",forcast_time)),]
+        print(indexed)
         return(indexed)
     }
 
